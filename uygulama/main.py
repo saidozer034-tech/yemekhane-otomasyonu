@@ -1,16 +1,13 @@
-import secrets
 from datetime import date
 import bcrypt
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+import onbellek
 import veritabani as db
 
 app = FastAPI(title="Yemekhane Otomasyonu API")
-
-# Aşama 2 için bellek içi oturum deposu (Aşama 3'te Redis'e taşınacak)
-OTURUMLAR: dict[str, int] = {}
 
 
 class GirisIstegi(BaseModel):
@@ -50,7 +47,7 @@ def _aktif_kullanici(authorization: str | None) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Oturum açmanız gerekiyor.")
     token = authorization.removeprefix("Bearer ").strip()
-    kullanici_id = OTURUMLAR.get(token)
+    kullanici_id = onbellek.oturum_dogrula_ve_yenile(token)
     if not kullanici_id:
         raise HTTPException(status_code=401, detail="Oturum geçersiz veya süresi dolmuş.")
     kullanici = db.kullanici_getir_kaynaktan(kullanici_id)
@@ -84,8 +81,7 @@ def giris(veri: GirisIstegi):
     if not sifre_dogru:
         return JSONResponse(status_code=401, content={"hata": "E-posta veya şifre hatalı."})
 
-    token = secrets.token_hex(24)
-    OTURUMLAR[token] = int(kullanici["id"])
+    token = onbellek.oturum_olustur(int(kullanici["id"]))
     kullanici.pop("sifre_hash", None)
     return {"token": token, "kullanici": kullanici}
 
@@ -94,7 +90,7 @@ def giris(veri: GirisIstegi):
 def cikis(authorization: str | None = Header(default=None)):
     if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ").strip()
-        OTURUMLAR.pop(token, None)
+        onbellek.oturum_sil(token)
     return {"mesaj": "Çıkış yapıldı."}
 
 
@@ -118,8 +114,18 @@ def gunun_menusu(
     authorization: str | None = Header(default=None),
 ):
     _aktif_kullanici(authorization)
+    anahtar = onbellek.menu_anahtari(yemekhane_id, tarih, ogun_id)
+
+    onbellekten = onbellek.menu_getir(yemekhane_id, tarih, ogun_id)
+    if onbellekten is not None:
+        print(f"[REDIS-MENU] HIT  -> {anahtar} (Veri Redis onbelleginden getirildi)", flush=True)
+        return {"menu": onbellekten, "kaynak": "redis"}
+
+    print(f"[REDIS-MENU] MISS -> {anahtar} (Veritabanindan okundu)", flush=True)
     menu = db.gunun_menusu_getir(yemekhane_id, tarih, ogun_id)
-    return {"menu": menu}
+    if menu is not None:
+        onbellek.menu_kaydet(yemekhane_id, tarih, ogun_id, menu)
+    return {"menu": menu, "kaynak": "veritabani"}
 
 
 @app.get("/api/haftalik-menu")
@@ -209,4 +215,7 @@ def yonetici_menu_olustur(
         veri.personel_fiyati,
         veri.yemek_idler,
     )
+    anahtar = onbellek.menu_anahtari(veri.yemekhane_id, veri.tarih, veri.ogun_id)
+    onbellek.menu_sil(veri.yemekhane_id, veri.tarih, veri.ogun_id)
+    print(f"[REDIS-MENU] INVALIDATE -> {anahtar} (Yonetici guncelledigi icin silindi)", flush=True)
     return {"mesaj": "Menü kaydedildi.", "menu_id": menu_id}
