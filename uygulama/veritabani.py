@@ -88,7 +88,15 @@ def kullanici_getir_kaynaktan(kullanici_id: int) -> dict | None:
                 (kullanici_id,),
             )
             satir = cur.fetchone()
-            return _serilestir(satir) if satir else None
+            if not satir:
+                return None
+            veri = _serilestir(satir)
+            cur.execute(
+                "SELECT alerjen_id FROM kullanici_alerjenleri WHERE kullanici_id = %s ORDER BY alerjen_id",
+                (kullanici_id,),
+            )
+            veri["alerjen_idler"] = [int(r["alerjen_id"]) for r in cur.fetchall()]
+            return veri
     finally:
         conn.close()
 
@@ -110,7 +118,29 @@ def sabitler_getir() -> dict:
                 """
             )
             ogunler = [_serilestir(s) for s in cur.fetchall()]
-            return {"yemekhaneler": yemekhaneler, "ogunler": ogunler}
+            cur.execute("SELECT id, ad FROM alerjenler ORDER BY id")
+            alerjenler = [_serilestir(s) for s in cur.fetchall()]
+            return {"yemekhaneler": yemekhaneler, "ogunler": ogunler, "alerjenler": alerjenler}
+    finally:
+        conn.close()
+
+
+def kullanici_alerjenleri_kaydet(kullanici_id: int, alerjen_idler: list[int]) -> list[int]:
+    temiz_idler = sorted(set(int(x) for x in alerjen_idler))
+    conn = yazma_baglantisi(autocommit=False)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM kullanici_alerjenleri WHERE kullanici_id = %s", (kullanici_id,))
+            for aid in temiz_idler:
+                cur.execute(
+                    "INSERT INTO kullanici_alerjenleri (kullanici_id, alerjen_id) VALUES (%s, %s)",
+                    (kullanici_id, aid),
+                )
+        conn.commit()
+        return temiz_idler
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -170,7 +200,8 @@ def haftalik_menuler_getir(yemekhane_id: int, kullanici_id: int) -> list[dict]:
                        m.ogrenci_fiyati, m.personel_fiyati,
                        (d.rezervasyon_son > NOW()) AS rezervasyon_acik,
                        r.id AS kullanici_rezervasyon_id,
-                       r.durum AS kullanici_rezervasyon_durum
+                       r.durum AS kullanici_rezervasyon_durum,
+                       r.porsiyon AS kullanici_rezervasyon_porsiyon
                   FROM v_menu_doluluk d
                   JOIN menuler m ON m.id = d.menu_id
                   LEFT JOIN rezervasyonlar r
@@ -188,8 +219,8 @@ def haftalik_menuler_getir(yemekhane_id: int, kullanici_id: int) -> list[dict]:
         conn.close()
 
 
-def rezervasyon_yap(kullanici_id: int, menu_id: int) -> dict:
-    sonuc = _yordam_cagir("CALL sp_rezervasyon_yap(%s, %s)", (kullanici_id, menu_id))
+def rezervasyon_yap(kullanici_id: int, menu_id: int, porsiyon: str = "tam") -> dict:
+    sonuc = _yordam_cagir("CALL sp_rezervasyon_yap(%s, %s, %s)", (kullanici_id, menu_id, porsiyon))
     guncel = kullanici_getir_kaynaktan(kullanici_id)
     if guncel:
         sonuc["bakiye"] = guncel["bakiye"]
@@ -210,7 +241,7 @@ def rezervasyonlarim_getir(kullanici_id: int) -> list[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT r.id, r.menu_id, r.durum, r.ucret, r.olusturma,
+                SELECT r.id, r.menu_id, r.porsiyon, r.durum, r.ucret, r.olusturma,
                        r.kullanma_zamani, r.iptal_zamani,
                        m.tarih, yh.ad AS yemekhane, o.ad AS ogun,
                        (TIMESTAMP(m.tarih, o.son_saat) > NOW()) AS iptal_edilebilir,

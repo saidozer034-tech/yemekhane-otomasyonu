@@ -59,6 +59,7 @@
         <button type="button" class="sekme" data-sekme="rezervasyonlar" aria-selected="false">Rezervasyonlarım</button>
         <button type="button" class="sekme" data-sekme="bakiye" aria-selected="false">Bakiye</button>
         <button type="button" class="sekme" data-sekme="degerlendirme" aria-selected="false">Değerlendirme</button>
+        <button type="button" class="sekme" data-sekme="profil" aria-selected="false">Alerjen Profilim</button>
         <button type="button" id="sekme-yonetici-btn" class="sekme gizli" data-sekme="yonetici" aria-selected="false">Yönetici Paneli</button>
       </nav>
 
@@ -85,6 +86,9 @@
       <!-- 3. HAFTALIK MENÜ VE REZERVASYON -->
       <section id="panel-haftalik" class="kart gizli">
         <h2>Haftalık Menü ve Rezervasyon</h2>
+        <p style="color: var(--metin-soluk); font-size: var(--boyut-kucuk);">
+          Öğle ve akşam öğünlerinde yarım porsiyon (%60 ücret) seçebilirsiniz. Kahvaltıda yalnızca tam porsiyon sunulur.
+        </p>
         <div class="filtre-izgara">
           <div>
             <label for="haftalik-yemekhane">Yemekhane</label>
@@ -145,6 +149,18 @@
           <button type="submit" class="dugme">Değerlendirmeyi Kaydet</button>
         </form>
         <div id="deg-gecmis" style="margin-top: 1.25rem;"></div>
+      </section>
+
+      <!-- PROFİL / ALERJEN TERCİHLERİ -->
+      <section id="panel-profil" class="kart gizli">
+        <h2>Alerjen Profilim</h2>
+        <p style="color: var(--metin-soluk); font-size: var(--boyut-kucuk);">
+          Hassasiyetiniz olan alerjenleri işaretleyin. Günün menüsünde bu alerjenleri içeren yemekler uyarı ile vurgulanır.
+        </p>
+        <form id="profil-alerjen-formu">
+          <div id="profil-alerjen-kutulari" class="kart-izgara" style="margin-bottom: 1rem;"></div>
+          <button type="submit" class="dugme">Alerjen Tercihlerini Kaydet</button>
+        </form>
       </section>
 
       <!-- 7. YÖNETİCİ PANELİ -->

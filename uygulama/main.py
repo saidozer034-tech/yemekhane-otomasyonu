@@ -17,6 +17,11 @@ class GirisIstegi(BaseModel):
 
 class RezervasyonIstegi(BaseModel):
     menu_id: int
+    porsiyon: str = "tam"
+
+
+class AlerjenGuncelleIstegi(BaseModel):
+    alerjen_idler: list[int]
 
 
 class BakiyeYukleIstegi(BaseModel):
@@ -82,8 +87,8 @@ def giris(veri: GirisIstegi):
         return JSONResponse(status_code=401, content={"hata": "E-posta veya şifre hatalı."})
 
     token = onbellek.oturum_olustur(int(kullanici["id"]))
-    kullanici.pop("sifre_hash", None)
-    return {"token": token, "kullanici": kullanici}
+    detayli = db.kullanici_getir_kaynaktan(int(kullanici["id"]))
+    return {"token": token, "kullanici": detayli}
 
 
 @app.post("/api/cikis")
@@ -98,6 +103,16 @@ def cikis(authorization: str | None = Header(default=None)):
 def ben(authorization: str | None = Header(default=None)):
     kullanici = _aktif_kullanici(authorization)
     return {"kullanici": kullanici}
+
+
+@app.post("/api/profil/alerjenler")
+def profil_alerjen_guncelle(
+    veri: AlerjenGuncelleIstegi,
+    authorization: str | None = Header(default=None),
+):
+    kullanici = _aktif_kullanici(authorization)
+    guncel_idler = db.kullanici_alerjenleri_kaydet(int(kullanici["id"]), veri.alerjen_idler)
+    return {"mesaj": "Alerjen tercihleriniz güncellendi.", "alerjen_idler": guncel_idler}
 
 
 @app.get("/api/sabitler")
@@ -144,7 +159,7 @@ def yeni_rezervasyon(
     authorization: str | None = Header(default=None),
 ):
     kullanici = _aktif_kullanici(authorization)
-    sonuc = db.rezervasyon_yap(int(kullanici["id"]), veri.menu_id)
+    sonuc = db.rezervasyon_yap(int(kullanici["id"]), veri.menu_id, veri.porsiyon)
     return {"mesaj": "Rezervasyon oluşturuldu.", **sonuc}
 
 
